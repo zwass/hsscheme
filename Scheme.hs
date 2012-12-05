@@ -15,13 +15,13 @@ instance Show Val where
 
 data Exp where
   Val :: Val -> Exp
-  -- Expressions
+  If :: Exp -> Exp -> Exp -> Exp
+
   Plus :: Exp -> Exp -> Exp
   Minus :: Exp -> Exp -> Exp
   Times :: Exp -> Exp -> Exp
   Divide :: Exp -> Exp -> Exp
 
-  If :: Exp -> Exp -> Exp -> Exp
   Equal :: Exp -> Exp -> Exp
   Geq :: Exp -> Exp -> Exp
   Gt :: Exp -> Exp -> Exp
@@ -69,79 +69,56 @@ divide _ (IntVal 0) = throwError "Divide by zero"
 divide _ (FloatVal 0) = throwError "Divide by zero"
 divide x y = arith div (/) "div" x y
 
-equal :: Val -> Val -> Val
-equal (IntVal x) (IntVal y) = BoolVal (x == y)
-equal (FloatVal x) (FloatVal y) = BoolVal (x == y)
-equal (BoolVal x) (BoolVal y) = BoolVal (x == y)
-equal (StringVal x) (StringVal y) = BoolVal (x == y)
-equal _ _ = BoolVal False
+comp :: (Int -> Int -> Bool) -> (Float -> Float -> Bool)
+     -> (Bool -> Bool -> Bool) -> (String -> String -> Bool)
+     -> String -> Val -> Val -> Either String Val
+comp o _ _ _ _ (IntVal x) (IntVal y) = return $ BoolVal (x `o` y)
+comp _ o _ _ _ (FloatVal x) (FloatVal y) = return $ BoolVal (x `o` y)
+comp _ _ o _ _ (BoolVal x) (BoolVal y) = return $ BoolVal (x `o` y)
+comp _ _ _ o _ (StringVal x) (StringVal y) = return $ BoolVal (x `o` y)
+comp _ _ _ _ s _ _ = throwError $ "Incompatible argument types in " ++ s
+
+-- With equal, we don't want to throw a type error
+equal :: Val -> Val -> Either String Val
+equal x y = case comp (==) (==) (==) (==) "" x y of
+          (Left _) -> return $ BoolVal False
+          Right res -> return res
 
 leq :: Val -> Val -> Either String Val
-leq (IntVal x) (IntVal y) = return $ BoolVal (x <= y)
-leq (FloatVal x) (FloatVal y) = return $ BoolVal (x <= y)
-leq (StringVal x) (StringVal y) = return $ BoolVal (x <= y)
-leq _ _ = throwError "Incompatible argument types in leq"
+leq = comp (<=) (<=) (<=) (<=) "leq"
 
 lt :: Val -> Val -> Either String Val
-lt (IntVal x) (IntVal y) = return $ BoolVal (x < y)
-lt (FloatVal x) (FloatVal y) = return $ BoolVal (x < y)
-lt (StringVal x) (StringVal y) = return $ BoolVal (x < y)
-lt _ _ = throwError "Incompatible argument types in lt"
+lt = comp (<) (<) (<) (<) "lt"
 
 geq :: Val -> Val -> Either String Val
-geq (IntVal x) (IntVal y) = return $ BoolVal (x >= y)
-geq (FloatVal x) (FloatVal y) = return $ BoolVal (x >= y)
-geq (StringVal x) (StringVal y) = return $ BoolVal (x >= y)
-geq _ _ = throwError "Incompatible argument types in geq"
+geq = comp (>=) (>=) (>=) (>=) "geq"
 
 gt :: Val -> Val -> Either String Val
-gt (IntVal x) (IntVal y) = return $ BoolVal (x > y)
-gt (FloatVal x) (FloatVal y) = return $ BoolVal (x > y)
-gt (StringVal x) (StringVal y) = return $ BoolVal (x > y)
-gt _ _ = throwError "Incompatible argument types in gt"
+gt = comp (>) (>) (>) (>) "gt"
 
+getArgs :: Exp -> ((Val -> Val -> Either String Val), Exp, Exp)
+getArgs (Plus x y) = (plus, x, y)
+getArgs (Minus x y) = (minus, x, y)
+getArgs (Times x y) = (times, x, y)
+getArgs (Divide x y) = (divide, x, y)
+getArgs (Equal x y) = (equal, x, y)
+getArgs (Geq x y) = (geq, x, y)
+getArgs (Gt x y) = (gt, x, y)
+getArgs (Leq x y) = (leq, x, y)
+getArgs (Lt x y) = (lt, x, y)
+getArgs _ = error "Argument handling not implemented"
 
 eval :: Exp -> Either String Val
 eval (Val x) = return x
-eval (Plus x y) = do
-  x' <- eval x
-  y' <- eval y
-  plus x' y'
-eval (Minus x y) = do
-  x' <- eval x
-  y' <- eval y
-  minus x' y'
-eval (Times x y) = do
-  x' <- eval x
-  y' <- eval y
-  times x' y'
-eval (Divide x y) = do
-  x' <- eval x
-  y' <- eval y
-  divide x' y'
 eval (If p t e) = do
   p' <- eval p
   case p' of
     (BoolVal True) -> eval t
     (BoolVal False) -> eval e
     _ -> throwError "Incompatible argument types in if"
-eval (Equal x y) = do
+-- Generic binary expression handling
+eval k = do
+  let (op, x, y) = getArgs k
   x' <- eval x
   y' <- eval y
-  return $ equal x' y'
-eval (Geq x y) = do
-  x' <- eval x
-  y' <- eval y
-  geq x' y'
-eval (Gt x y) = do
-  x' <- eval x
-  y' <- eval y
-  gt x' y'
-eval (Leq x y) = do
-  x' <- eval x
-  y' <- eval y
-  leq x' y'
-eval (Lt x y) = do
-  x' <- eval x
-  y' <- eval y
-  lt x' y'
+  op x' y'
