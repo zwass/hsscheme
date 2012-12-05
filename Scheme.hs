@@ -14,6 +14,7 @@ instance Show Val where
   show (BoolVal x) = show x
 
 data Exp where
+  Nil :: Exp
   Val :: Val -> Exp
   If :: Exp -> Exp -> Exp -> Exp
 
@@ -31,6 +32,7 @@ data Exp where
 instance Show Exp where
   -- show :: Exp -> String
   show (Val x) = show x
+  show Nil = "nil"
   show (Plus x y) = "(+ " ++ show x ++ " " ++ show y ++ ")"
   show (Minus x y) = "(- " ++ show x ++ " " ++ show y ++ ")"
   show (Times x y) = "(* " ++ show x ++ " " ++ show y ++ ")"
@@ -110,6 +112,7 @@ getArgs _ = error "Argument handling not implemented"
 
 eval :: Exp -> Either String Val
 eval (Val x) = return x
+eval Nil = throwError "Tried to eval nil"
 eval (If p t e) = do
   p' <- eval p
   case p' of
