@@ -167,14 +167,10 @@ eval (If p t e) = do
     (BoolVal True) -> eval t
     (BoolVal False) -> eval e
     _ -> throwError "Incompatible argument types in if"
-eval (Lambda _ _) = throwError "Tried to eval lambda"
-eval (Exp (l@(Lambda _ _):args)) = evalFun l args
 eval (Exp ((Var x):args)) = do
   l <- lookupVar x
   evalFun l args
-eval (Exp (x:args)) = do
-  evalFun x args
--- Generic binary expression handling
+eval (Exp (l:args)) = evalFun l args
 eval k = do
   let (op, x, y) = getArgs k
   x' <- eval x

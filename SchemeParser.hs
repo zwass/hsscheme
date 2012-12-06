@@ -24,13 +24,13 @@ schemeStyle    = P.LanguageDef
                  , P.identLetter    = alphaNum <|> oneOf "_'-"
                  , P.opStart        = P.opLetter emptyDef
                  , P.opLetter       = oneOf ":!#$%&*+./<=>?@\\^|-~"
-                 , P.reservedOpNames= ["if", "nil"]
-                 , P.reservedNames  = []
+                 , P.reservedOpNames= []
+                 , P.reservedNames  = ["if", "nil", "lambda", "define"]
                  , P.caseSensitive  = True
                  }
 
 lexer :: P.GenTokenParser String u Identity
-lexer = P.makeTokenParser javaStyle
+lexer = P.makeTokenParser schemeStyle
 
 parens :: ParsecT String u Identity a -> ParsecT String u Identity a
 parens = P.parens lexer
@@ -56,14 +56,14 @@ parseVal = try (FloatVal <$> float)
            <|> IntVal <$> integer
 
 parseOp :: String -> (Exp -> Exp -> b) -> ParsecT String u Identity b
-parseOp s o = do
+parseOp s o = try $ parens $ do
   reserved s
   x <- parseExp
   y <- parseExp
   return $ o x y
 
 parseIf :: ParsecT String u Identity Exp
-parseIf = do
+parseIf = try $ parens $ do
   reserved "if"
   cond <- parseExp
   t <- parseExp
@@ -71,9 +71,9 @@ parseIf = do
   return $ If cond t e
 
 parseLambda :: ParsecT String u Identity Exp
-parseLambda = do
+parseLambda = try $ parens $ do
   reserved "lambda"
-  vs <- parens (many1 identifier)
+  vs <- parens (many identifier)
   e <- parseExp
   return $ Lambda vs e
 
@@ -90,10 +90,9 @@ parseExp = do { reserved "nil"; return Nil}
            <|> parseOp ">" Gt
            <|> parseOp ">=" Geq
            <|> parseIf
-           <|> try (parens parseLambda)
+           <|> parseLambda
            <|> Val <$> parseVal
            <|> Var <$> identifier
-           <|> try (parens parseExp)
            <|> Exp <$> (parens (many1 parseExp))
 
 parseAndRun :: String -> Either String Val
