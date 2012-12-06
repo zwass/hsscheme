@@ -46,6 +46,7 @@ data Exp where
   Gt :: Exp -> Exp -> Exp
   Leq :: Exp -> Exp -> Exp
   Lt :: Exp -> Exp -> Exp
+--  deriving Show
 
 instance Show Exp where
   show (Exp e) = "(" ++ exps ++ ")" where
@@ -145,16 +146,20 @@ evalFun (Lambda v e) vs = do
   let varMap = M.fromList $ zip v vs''
   -- Using union with new first causes newer bindings to override older
   local (M.union varMap) (eval e)
-evalFun _ _ = error "Shouldn't be calling evalFun on non-Lamba"
+evalFun e _ = throwError $ show e ++ " is not applicable"
 
+lookupVar :: Var -> ER Exp
+lookupVar v = do
+  ns <- ask
+  case M.lookup v ns of
+    Nothing -> throwError $ "Undefined variable: " ++ v
+    Just e -> return e
 
 eval :: Exp -> ER Val
 eval (Val x) = return x
 eval (Var x) = do
-  ns <- ask
-  case M.lookup x ns of
-    Nothing -> throwError $ "Undefined variable: " ++ x
-    Just e -> eval e  
+  e <- lookupVar x
+  eval e
 eval Nil = throwError "Tried to eval nil"
 eval (If p t e) = do
   p' <- eval p
@@ -164,6 +169,11 @@ eval (If p t e) = do
     _ -> throwError "Incompatible argument types in if"
 eval (Lambda _ _) = throwError "Tried to eval lambda"
 eval (Exp (l@(Lambda _ _):args)) = evalFun l args
+eval (Exp ((Var x):args)) = do
+  l <- lookupVar x
+  evalFun l args
+eval (Exp (x:args)) = do
+  evalFun x args
 -- Generic binary expression handling
 eval k = do
   let (op, x, y) = getArgs k

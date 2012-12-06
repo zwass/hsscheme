@@ -3,6 +3,7 @@
 module SchemeParser where
 
 import Control.Applicative hiding (many, (<|>))
+import Control.Monad.Error
 
 import GHC.Float
   
@@ -68,7 +69,14 @@ parseIf = do
   t <- parseExp
   e <- parseExp
   return $ If cond t e
-    
+
+parseLambda :: ParsecT String u Identity Exp
+parseLambda = do
+  reserved "lambda"
+  vs <- parens (many1 identifier)
+  e <- parseExp
+  return $ Lambda vs e
+
 parseExp :: ParsecT String u Identity Exp
 parseExp = do { reserved "nil"; return Nil}
            <|> parseOp "+" Plus
@@ -81,11 +89,19 @@ parseExp = do { reserved "nil"; return Nil}
            <|> parseOp "<=" Leq
            <|> parseOp ">" Gt
            <|> parseOp ">=" Geq
-           <|> Val <$> parseVal
            <|> parseIf
-           <|> parens parseExp
+           <|> try (parens parseLambda)
+           <|> Val <$> parseVal
+           <|> Var <$> identifier
+           <|> try (parens parseExp)
+           <|> Exp <$> (parens (many1 parseExp))
 
 parseAndRun :: String -> Either String Val
 parseAndRun s = case parse parseExp "" s of
-  Left e -> Left $ show e
-  Right p -> eval p
+  Left e -> throwError $ show e
+  Right p -> runEval p
+
+parseAndRunWithEnv :: String -> Either String Val
+parseAndRunWithEnv s = case parse parseExp "" s of
+  Left e -> throwError $ show e
+  Right p -> runEvalWithEnv testEnv p
