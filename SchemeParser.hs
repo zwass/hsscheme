@@ -51,8 +51,8 @@ semiSep :: ParsecT String u Identity a -> ParsecT String u Identity [a]
 semiSep = P.semiSep lexer
 
 parseVal :: ParsecT String u Identity Val
-parseVal = IntVal <$> integer
-           <|> FloatVal <$> float
+parseVal = try (FloatVal <$> float)
+           <|> IntVal <$> integer
 
 parseOp :: String -> (Exp -> Exp -> b) -> ParsecT String u Identity b
 parseOp s o = do
@@ -76,6 +76,7 @@ parseExp = do { reserved "nil"; return Nil}
            <|> parseOp "*" Times
            <|> parseOp "/" Divide
            <|> parseOp "==" Equal
+           <|> parseOp "!=" NEqual
            <|> parseOp "<" Lt
            <|> parseOp "<=" Leq
            <|> parseOp ">" Gt
@@ -84,3 +85,7 @@ parseExp = do { reserved "nil"; return Nil}
            <|> parseIf
            <|> parens parseExp
 
+parseAndRun :: String -> Either String Val
+parseAndRun s = case parse parseExp "" s of
+  Left e -> Left $ show e
+  Right p -> eval p
