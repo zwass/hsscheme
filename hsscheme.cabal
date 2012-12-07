@@ -16,6 +16,6 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 executable hsscheme
-  -- main-is:             
+  main-is:             Main.hs
   -- other-modules:       
   build-depends:       base ==4.5.*, containers ==0.4.*, parsec ==3.1.*, Shellac ==0.9.*, mtl ==2.1.*, transformers ==0.3.*
