@@ -8,13 +8,14 @@
   All interaction occurs through the REPL defined in =Main.hs=.
 
 * Requirements
-  Haskell platform
-  Shellac (Available on Hackage)
+  - Haskell platform
+  - Shellac (Available on Hackage)
 
 * Usage
   The interpreter can be built using the provided cabal and =Setup.hs= files:
 
   =runhaskell Setup.py configure --user=
+
   =runhaskell Setup.py build=
   
   Then run with:
