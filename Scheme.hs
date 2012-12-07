@@ -137,15 +137,18 @@ getArgs (Geq x y) = (geq, x, y)
 getArgs (Gt x y) = (gt, x, y)
 getArgs (Leq x y) = (leq, x, y)
 getArgs (Lt x y) = (lt, x, y)
-getArgs _ = error "Argument handling not implemented"
+getArgs x = error $ "Argument handling not implemented:\n" ++ show x
 
 evalFun :: Exp -> [Exp] -> ER Val
-evalFun (Lambda v e) vs = do
-  vs' <- sequence $ map eval vs
-  let vs'' = map Val vs'
-  let varMap = M.fromList $ zip v vs''
-  -- Using union with new first causes newer bindings to override older
-  local (M.union varMap) (eval e)
+evalFun l@(Lambda v e) vs
+  | length v == length vs = do
+    let varMap = M.fromList $ zip v vs
+    -- Using union with new first causes newer bindings to override older
+    local (M.union varMap) (eval e)
+  | otherwise = throwError $ "The function " ++ show l
+                ++ " has been called with " ++ show (length vs)
+                ++ " arguments, but requires exactly " ++ show (length v)
+                ++ " arguments."
 evalFun e _ = throwError $ show e ++ " is not applicable"
 
 lookupVar :: Var -> ER Exp
