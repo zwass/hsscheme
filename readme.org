@@ -1,1 +1,32 @@
-A (bastardized) Scheme interpreter written in Haskell.
+* HsScheme
+  A (bastardized) Scheme interpreter written in Haskell.
+
+* Description
+  This implementation provides the basic mathematical and comparison operations,
+  along with =if=, =lambda= and =define=. With these capabilities, the programmer can
+  implement non-trivial recursive functions, such as fibonacci and factorial.
+  All interaction occurs through the REPL defined in =Main.hs=.
+
+* Requirements
+  Haskell platform
+  Shellac (Available on Hackage)
+
+* Usage
+  The interpreter can be built using the provided cabal and =Setup.hs= files:
+
+  =runhaskell Setup.py configure --user=
+  =runhaskell Setup.py build=
+  
+  Then run with:
+
+  =dist/build/hsscheme/hsscheme=
+  
+
+  Try running code like:
+  #+begin_src lisp
+  (define fact (lambda (n) (if (<= n 0) 1 (* n (fact (- n 1))))))
+
+  (fact 5)
+  #+end_src
+  
+  
