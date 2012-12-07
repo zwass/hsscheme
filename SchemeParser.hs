@@ -36,8 +36,8 @@ parens :: ParsecT String u Identity a -> ParsecT String u Identity a
 parens = P.parens lexer
 identifier :: ParsecT String u Identity String
 identifier = P.identifier lexer
-integer :: ParsecT String u Identity Int
-integer = fromInteger <$> (P.integer lexer)
+integer :: ParsecT String u Identity Integer
+integer = P.integer lexer
 float :: ParsecT String u Identity Float
 float = double2Float <$> P.float lexer
 reserved :: String -> ParsecT String u Identity ()
@@ -77,6 +77,13 @@ parseLambda = try $ parens $ do
   e <- parseExp
   return $ Lambda vs e
 
+parseDefine :: ParsecT String u Identity Exp
+parseDefine = try $ parens $ do
+  reserved "define"
+  v <- identifier
+  e <- parseExp
+  return $ Define v e
+
 parseExp :: ParsecT String u Identity Exp
 parseExp = do { reserved "nil"; return Nil}
            <|> parseOp "+" Plus
@@ -91,16 +98,17 @@ parseExp = do { reserved "nil"; return Nil}
            <|> parseOp ">=" Geq
            <|> parseIf
            <|> parseLambda
+           <|> parseDefine
            <|> Val <$> parseVal
            <|> Var <$> identifier
            <|> Exp <$> (parens (many1 parseExp))
 
-parseAndRun :: String -> Either String Val
+parseAndRun :: String -> Either String Exp
 parseAndRun s = case parse parseExp "" s of
   Left e -> throwError $ show e
   Right p -> runEval p
 
-parseAndRunWithEnv :: String -> Either String Val
+parseAndRunWithEnv :: String -> Either String Exp
 parseAndRunWithEnv s = case parse parseExp "" s of
   Left e -> throwError $ show e
   Right p -> runEvalWithEnv testEnv p

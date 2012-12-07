@@ -9,7 +9,7 @@ import Data.List(intercalate)
 import Data.Map(Map)
 import qualified Data.Map as M
 
-data Val = IntVal Int | FloatVal Float | StringVal String | BoolVal Bool
+data Val = IntVal Integer| FloatVal Float | StringVal String | BoolVal Bool
           deriving (Eq, Ord)
 
 instance Show Val where
@@ -27,6 +27,8 @@ type NS = Map Var Exp
 
 data Exp where
   Exp :: [Exp] -> Exp
+
+  Define :: Var -> Exp -> Exp
   
   Nil :: Exp
   Val :: Val -> Exp
@@ -46,11 +48,12 @@ data Exp where
   Gt :: Exp -> Exp -> Exp
   Leq :: Exp -> Exp -> Exp
   Lt :: Exp -> Exp -> Exp
---  deriving Show
+--  deriving Show -- (Useful for debugging)
 
 instance Show Exp where
   show (Exp e) = "(" ++ exps ++ ")" where
     exps = intercalate " " . map show $ e
+  show (Define v e) = "(define " ++ v ++ " " ++ show e ++ ")"
   show (Val x) = show x
   show (Var x) = x
   show Nil = "nil"
@@ -71,62 +74,70 @@ instance Show Exp where
   show (Lt x y) = "(< " ++ show x ++ " " ++ show y ++ ")"
 
 -- Used to build arithmetic operations
-arith :: (Int -> Int -> Int) -> (Float -> Float -> Float)
-      -> String -> Val -> Val -> ER Val
-arith o _  _ (IntVal x) (IntVal y) = return $ IntVal (x `o` y)
-arith _ o _ (IntVal x) (FloatVal y) = return $ FloatVal ((fromIntegral x) `o` y)
-arith _ o _ (FloatVal x) (IntVal y) = return $ FloatVal (x `o` (fromIntegral y))
-arith _ o _ (FloatVal x) (FloatVal y) = return $ FloatVal (x `o` y)
+arith :: (Integer-> Integer-> Integer) -> (Float -> Float -> Float)
+      -> String -> Exp -> Exp -> ER Exp
+arith o _  _ (Val (IntVal x)) (Val (IntVal y)) =
+  return . Val $ IntVal (x `o` y)
+arith _ o _ (Val (IntVal x)) (Val (FloatVal y)) =
+  return . Val $ FloatVal ((fromIntegral x) `o` y)
+arith _ o _ (Val (FloatVal x)) (Val (IntVal y)) =
+  return . Val $ FloatVal (x `o` (fromIntegral y))
+arith _ o _ (Val (FloatVal x)) (Val (FloatVal y)) =
+  return . Val $ FloatVal (x `o` y)
 arith _ _ s _ _ = throwError $ "Incompatible argument types in " ++ s
 
-plus :: Val -> Val -> ER Val
+plus :: Exp -> Exp -> ER Exp
 plus = arith (+) (+) "plus"
 
-minus :: Val -> Val -> ER Val
+minus :: Exp -> Exp -> ER Exp
 minus = arith (-) (-) "minus"
 
-times :: Val -> Val -> ER Val
+times :: Exp -> Exp -> ER Exp
 times = arith (*) (*) "times"
 
 -- Have to check div zero cases separately here
-divide :: Val -> Val -> ER Val
-divide _ (IntVal 0) = throwError "Divide by zero"
-divide _ (FloatVal 0) = throwError "Divide by zero"
+divide :: Exp -> Exp -> ER Exp
+divide _ (Val (IntVal 0)) = throwError "Divide by zero"
+divide _ (Val (FloatVal 0)) = throwError "Divide by zero"
 divide x y = arith div (/) "div" x y
 
-comp :: (Int -> Int -> Bool) -> (Float -> Float -> Bool)
+comp :: (Integer-> Integer-> Bool) -> (Float -> Float -> Bool)
      -> (Bool -> Bool -> Bool) -> (String -> String -> Bool)
-     -> String -> Val -> Val -> ER Val
-comp o _ _ _ _ (IntVal x) (IntVal y) = return $ BoolVal (x `o` y)
-comp _ o _ _ _ (FloatVal x) (FloatVal y) = return $ BoolVal (x `o` y)
-comp _ _ o _ _ (BoolVal x) (BoolVal y) = return $ BoolVal (x `o` y)
-comp _ _ _ o _ (StringVal x) (StringVal y) = return $ BoolVal (x `o` y)
+     -> String -> Exp -> Exp -> ER Exp
+comp o _ _ _ _ (Val (IntVal x)) (Val (IntVal y)) =
+  return . Val $ BoolVal (x `o` y)
+comp _ o _ _ _ (Val (FloatVal x)) (Val (FloatVal y)) =
+  return . Val $ BoolVal (x `o` y)
+comp _ _ o _ _ (Val (BoolVal x)) (Val (BoolVal y)) =
+  return . Val $ BoolVal (x `o` y)
+comp _ _ _ o _ (Val (StringVal x)) (Val (StringVal y)) =
+  return . Val $ BoolVal (x `o` y)
 comp _ _ _ _ s _ _ = throwError $ "Incompatible argument types in " ++ s
 
 -- With equal, we don't want to throw a type error
-equal :: Val -> Val -> ER Val
+equal :: Exp -> Exp -> ER Exp
 equal x y = comp (==) (==) (==) (==) "" x y
             `catchError`
-            \_ -> return $ BoolVal False
+            \_ -> return . Val $ BoolVal False
 
-nequal :: Val -> Val -> ER Val
+nequal :: Exp -> Exp -> ER Exp
 nequal x y = comp (/=) (/=) (/=) (/=) "" x y
             `catchError`
-            \_ -> return $ BoolVal True
+            \_ -> return . Val $ BoolVal True
 
-leq :: Val -> Val -> ER Val
+leq :: Exp -> Exp -> ER Exp
 leq = comp (<=) (<=) (<=) (<=) "leq"
 
-lt :: Val -> Val -> ER Val
+lt :: Exp -> Exp -> ER Exp
 lt = comp (<) (<) (<) (<) "lt"
 
-geq :: Val -> Val -> ER Val
+geq :: Exp -> Exp -> ER Exp
 geq = comp (>=) (>=) (>=) (>=) "geq"
 
-gt :: Val -> Val -> ER Val
+gt :: Exp -> Exp -> ER Exp
 gt = comp (>) (>) (>) (>) "gt"
 
-getArgs :: Exp -> ((Val -> Val -> ER Val), Exp, Exp)
+getArgs :: Exp -> ((Exp -> Exp -> ER Exp), Exp, Exp)
 getArgs (Plus x y) = (plus, x, y)
 getArgs (Minus x y) = (minus, x, y)
 getArgs (Times x y) = (times, x, y)
@@ -139,10 +150,11 @@ getArgs (Leq x y) = (leq, x, y)
 getArgs (Lt x y) = (lt, x, y)
 getArgs x = error $ "Argument handling not implemented:\n" ++ show x
 
-evalFun :: Exp -> [Exp] -> ER Val
+evalFun :: Exp -> [Exp] -> ER Exp
 evalFun l@(Lambda v e) vs
   | length v == length vs = do
-    let varMap = M.fromList $ zip v vs
+    vs' <- sequence . (map eval) $ vs
+    let varMap = M.fromList $ zip v vs'
     -- Using union with new first causes newer bindings to override older
     local (M.union varMap) (eval e)
   | otherwise = throwError $ "The function " ++ show l
@@ -158,17 +170,18 @@ lookupVar v = do
     Nothing -> throwError $ "Undefined variable: " ++ v
     Just e -> return e
 
-eval :: Exp -> ER Val
-eval (Val x) = return x
+eval :: Exp -> ER Exp
+eval v@(Val _) = return v
+eval l@(Lambda _ _) = return l
 eval (Var x) = do
   e <- lookupVar x
   eval e
-eval Nil = throwError "Tried to eval nil"
+eval Nil = return Nil
 eval (If p t e) = do
   p' <- eval p
   case p' of
-    (BoolVal True) -> eval t
-    (BoolVal False) -> eval e
+    (Val (BoolVal True)) -> eval t
+    (Val (BoolVal False)) -> eval e
     _ -> throwError "Incompatible argument types in if"
 eval (Exp ((Var x):args)) = do
   l <- lookupVar x
@@ -180,14 +193,14 @@ eval k = do
   y' <- eval y
   op x' y'
 
-runEval :: Exp -> Either String Val
+runEval :: Exp -> Either String Exp
 runEval = runEvalWithEnv M.empty
 
-runEvalWithEnv :: NS -> Exp -> Either String Val
+runEvalWithEnv :: NS -> Exp -> Either String Exp
 runEvalWithEnv env e = runReader (runErrorT (eval e)) env
 
 testEnv :: Map String Exp
 testEnv = M.fromList [("X", Val $ IntVal 0)]
 
-testEval :: Exp -> Either String Val
+testEval :: Exp -> Either String Exp
 testEval = runEvalWithEnv testEnv
